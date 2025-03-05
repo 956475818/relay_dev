@@ -72,6 +72,8 @@ std::map<std::string, std::string> mapDriveStrength = {
 	{"50935", "CONFIG_LED_21p0_mA"}
 };
 
+////缓存所有GND的数据 标识符和设备即可   K35_TMU_CNTL             K35_NC_TMU       2        AQY22XRXT_SMT-4P-AQY225R3TY
+std::vector<std::string> gndData;   //K35_TMU_CNTL_K35_NC_TMU_AQY22XRXT_SMT-4P-AQY225R3TY
 
 class Input {
     private:
@@ -366,10 +368,18 @@ int getNetlistData(Input& input) {
 
         //Stores the relevant information in netlistData
         input.netlistData.push_back(NetlistData());
-        input.netlistData[loopCounter].vecName.push_back(temp.vecName[0]);
-        input.netlistData[loopCounter].vecIdentifier.push_back(temp.vecIdentifier[0]);
+        std::string strName = temp.vecName[0];
+        std::string strIdentifier = temp.vecIdentifier[0];
+        std::string strDevice = temp.vecDevice[0];
+
+        input.netlistData[loopCounter].vecName.push_back(strName);
+        input.netlistData[loopCounter].vecIdentifier.push_back(strIdentifier);
         input.netlistData[loopCounter].vecConnection.push_back(temp.vecConnection[0]);
-        input.netlistData[loopCounter].vecDevice.push_back(temp.vecDevice[0]);
+        input.netlistData[loopCounter].vecDevice.push_back(strDevice);
+
+        //保存GND的数据
+		if (strName == "GND" && strIdentifier[0] == 'K')
+			gndData.push_back(strIdentifier + "_" + strDevice);
 
         //Removes the temporary data to prepare for the next cycle;
         temp.vecName.clear();
@@ -769,13 +779,28 @@ std::string convertNormalState(std::vector<NetlistData> input, int index){
     std::string normalState = "RELAY_NO";
     
     //遍历
-    for(int i=0; i<input[index].vecIdentifier.size(); i++){
-        //Checks if the identifier specifies the relay as normally closed
-        //检查标识符是否指定继电器为_NC
-        if(input[index].vecIdentifier[i].find("_NC_") != std::string::npos){
-            normalState = "RELAY_NC";
-            break;
+	for (int i = 0; i < input[index].vecIdentifier.size(); i++) {
+        //通过标识符+_+设备名来匹配是否连接了GND
+        std::string strId = input[index].vecIdentifier[i];
+		//判断第一个字符是否为"K"
+        if (strId[0] != 'K')
+            continue;
+
+        std::string str = strId + "_" + input[index].vecDevice[i];
+		for (auto& name : gndData)
+        {
+            if (name == str)
+            {
+                normalState = "RELAY_NC";
+				break;
+            }
         }
+
+//         //检查标识符是否指定继电器为_NC
+//         if(input[index].vecIdentifier[i].find("_NC_") != std::string::npos){
+//             normalState = "RELAY_NC";
+//             break;
+//         }
     }
 
     //Returns the normal state of the relay
